@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import QRCodeStyling from "qr-code-styling";
 
 type ExportFormat = "png" | "jpeg";
 
@@ -50,7 +49,8 @@ export default function QRGenerator() {
   const [margin, setMargin] = useState(2);
   const [statusMessage, setStatusMessage] = useState("");
 
-  const qrInstanceRef = useRef<QRCodeStyling | null>(null);
+  const qrInstanceRef = useRef<import("qr-code-styling").default | null>(null);
+  const qrLibRef = useRef<typeof import("qr-code-styling").default | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
 
   const sanitizedSize = useMemo(() => {
@@ -61,23 +61,36 @@ export default function QRGenerator() {
   }, [size]);
 
   useEffect(() => {
-    qrInstanceRef.current = new QRCodeStyling(
-      buildQrOptions({
-        data: inputValue,
-        foregroundColor,
-        backgroundColor,
-        isTransparent,
-        size: PREVIEW_SIZE,
-        margin
-      })
-    );
+    let isActive = true;
 
-    if (previewRef.current && qrInstanceRef.current) {
-      previewRef.current.innerHTML = "";
-      qrInstanceRef.current.append(previewRef.current);
+    async function initQr() {
+      const module = await import("qr-code-styling");
+      if (!isActive) {
+        return;
+      }
+
+      qrLibRef.current = module.default;
+      qrInstanceRef.current = new module.default(
+        buildQrOptions({
+          data: inputValue,
+          foregroundColor,
+          backgroundColor,
+          isTransparent,
+          size: PREVIEW_SIZE,
+          margin
+        })
+      );
+
+      if (previewRef.current && qrInstanceRef.current) {
+        previewRef.current.innerHTML = "";
+        qrInstanceRef.current.append(previewRef.current);
+      }
     }
 
+    initQr();
+
     return () => {
+      isActive = false;
       if (previewRef.current) {
         previewRef.current.innerHTML = "";
       }
@@ -105,6 +118,11 @@ export default function QRGenerator() {
     format: ExportFormat,
     overrideTransparent?: boolean
   ): Promise<Blob> {
+    const QRCodeStyling = qrLibRef.current;
+    if (!QRCodeStyling) {
+      throw new Error("QR library is not loaded yet.");
+    }
+
     const instance = new QRCodeStyling(
       buildQrOptions({
         data: inputValue,
